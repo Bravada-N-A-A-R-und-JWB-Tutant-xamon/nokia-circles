@@ -1,0 +1,9 @@
+[Desktop Entry]
+_Name=Nokia Circles
+Exec=qmlscene %U qml/Main.qml
+Icon=assets/NokiaCircles.svg
+X-Lomiri-Splash-Image=assets/NokiaCircles_Splash.img
+X-Lomiri-Splash-Color=#F7F7F7
+Terminal=false
+Type=Application
+X-Lomiri-Touch=true

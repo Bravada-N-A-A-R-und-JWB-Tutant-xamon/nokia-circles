@@ -1,0 +1,90 @@
+name: Build UT Click Packages
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-and-release:
+    name: Build and Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install Clickable
+        run: |
+          python3 -m pip install --upgrade pip
+          pip3 install clickable-ut
+
+      - name: Build Click Packages
+        run: |
+          # Флаг, чтобы не собирать лишнего, если проект архитектурно-независим
+          BUILT_ALL=false
+
+          echo "=== Пробуем собрать под ARM64 ==="
+          if ! clickable build --arch arm64; then
+            echo "Сборка под ARM64 завершилась с ошибкой."
+            echo "Пробуем собрать универсальный пакет (arch: all)..."
+            
+            if clickable build --arch all; then
+              echo "Успешно собран универсальный пакет!"
+              BUILT_ALL=true
+            else
+              echo "Ошибка: Сборка не удалась ни под одну архитектуру!" && exit 1
+            fi
+          fi
+
+          # Если это НЕ pure-qml проект, собираем остальные бинарные архитектуры
+          if [ "$BUILT_ALL" = "false" ]; then
+            echo "Проект требует сборки под конкретные платформы. Собираем ARMHF и AMD64..."
+            
+            echo "=== Сборка под ARMHF ==="
+            clickable build --arch armhf
+            
+            echo "=== Сборка под AMD64 ==="
+            clickable build --arch amd64
+          else
+            echo "Проект является архитектурно-независимым (pure QML). Пропускаем сборку отдельных платформ."
+          fi
+
+      - name: Collect Click Packages
+        id: collect_files
+        run: |
+          mkdir dist
+          find . -name "*.click" -exec cp {} dist/ \;
+          echo "=== Найденные .click пакеты ==="
+          ls -lh dist
+          if [ -z "$(ls -A dist)" ]; then
+            echo "Ошибка: Ни один .click пакет не был найден в репозитории!" && exit 1
+          fi
+
+      - name: Create or Update GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.click
+          tag_name: latest
+          name: "Latest Build"
+          body: "Автоматическая сборка для JWB-Denda."
+          draft: false
+          prerelease: false
+          make_latest: true
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
